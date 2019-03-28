@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using System.Xml;
+using System.Collections.Generic;
 
 namespace SimpleXML
 {
@@ -12,8 +13,8 @@ namespace SimpleXML
         // Start Fields
         // Start Constants
         // Remember to call the WINDOWS Read() API as few times as possible
-        private const int _defaultBufferSize = 4096;
-        private const int _hugeBufferSize = 4096 * 2;
+        private const int _defaultBufferSize = 4096 * 2;
+        private const int _hugeBufferSize = 4096 * 4;
         private const int _maximumBufferSize = 4096 * 8;
         private const int _maximumByteSequenceLength = 6; // A read sequence has the maximum meaningful length of 6 bytes (more likely to be <= 4)
         private const int _approxXMLDeclLength = 80; // About the Length of an XML declaration
@@ -37,6 +38,7 @@ namespace SimpleXML
             internal Decoder baseDecoder;
             internal bool fullyBuffered;
             internal int documentStartPos;
+            internal long streamLength;
             internal void clear()
             {
                 baseUri = null;
@@ -44,6 +46,7 @@ namespace SimpleXML
                 baseEncoding = null;
                 baseDecoder = null;
                 fullyBuffered = false;
+                streamLength = 0;
                 documentStartPos = 0;
             }
             internal void close()
@@ -57,43 +60,31 @@ namespace SimpleXML
         internal struct StateData
         {
             // Position mangement
-            internal int _currLinePos;
-            internal int _currLine;
-            internal int _currCharPos;
-            internal int lineStartPos;
+            
 
             // Byte buffer
+            // increases speed and decreases memory footprint of the parser
             internal byte[] bytes;
-            internal int bytePos;
+            // Bytes converted into char overall
             internal int bytesUsed;
-
+            // Bytes read from stream last time
+            internal int bytesRead;
+            
             // Handles EOF
             internal bool EOF;
-            internal bool _isStreamEof;
 
             // Character buffer
             // It's good to use a buffer to increase speed and and minimize the amout of systemcalls neccessary
             internal char[] chars;
-            internal int charPos;
             internal int charsUsed;
-            // Def. above -- TODO: copy where it' most often needed -- merge structs: internal Encoding encoding;
-            // What is this?: internal bool appendMode;
 
             internal void clear()
             {
-                _currLinePos = 0;
-                _currLine = 0;
-                _currCharPos = 0;
-                lineStartPos = 0;
                 bytes = null;
-                bytePos = 0;
-                bytesUsed = 0; // Bytes already read from the stream
-                bytesUsed = 0; // Bytes already read from the stream
-                EOF = false;
-                _isStreamEof = false;
                 chars = null;
-                charPos = 0;
+                bytesUsed = 0; 
                 charsUsed = 0;
+                EOF = false;
             }
             internal void close() => clear();
         }
@@ -115,14 +106,14 @@ namespace SimpleXML
         public SimpleDoc(Uri uri, byte[] bytes) : this(uri, (Stream)null, bytes) { }
         // End Constructors
 
-
         // Start Exposed Methods
+        int rounds = 0; // Test Variable
         public void _testRead()
         {
-
+            while (ReadData())
+            ;;
         }
         // End Exposed Methods
-
 
         // Start Private Constructors
         private SimpleDoc(Uri uri, Stream stream, byte[] buffer)
@@ -149,7 +140,6 @@ namespace SimpleXML
             // First we allocate a buffer. The buffer allocation and Encoding Detection is pretty much
             // the same as in System.Xml.TextReaderImpl, for the Exception of a MemoryStream, which gets
             // handled differently
-            // handled differently
             int bufferSize = _calculateBufferSize(stream);
 
             // Allocating byte buffer
@@ -157,19 +147,19 @@ namespace SimpleXML
                 _state.bytes = new byte[ bufferSize ];
             // Allocating char buffer
             if (_state.chars == null || _state.chars.Length < bufferSize + 1)
-                _state.chars = new char[bufferSize + 1];
+                _state.chars = new char[bufferSize]; // Hier wurde +1 aufgerechnet (why tho?)
 
             // Getting at least 4 bytes to detect encoding (max. UTF-16)
-            _state.bytePos = 0;
-            while ( _state.bytesUsed < 4 && _state.bytes.Length - _state.bytesUsed > 0)
+            while ( _state.bytesRead < 4 && _state.bytes.Length - _state.bytesUsed > 0)
             {
-                int read = stream.Read(_state.bytes, _state.bytesUsed, _state.bytes.Length - _state.bytesUsed);
+                int read = stream.Read(_state.bytes, _state.bytesRead, 1);
                 if (read == 0)
                 {
                     _state.EOF = true;
                     break;
                 }
-                _state.bytesUsed += read;
+                _state.bytesRead += read;
+                
             }
 
             // Detecting and setting the encoding
@@ -177,21 +167,20 @@ namespace SimpleXML
             _setupEncoding(encoding);
 
             // Getting the length of the BOM, setting the beginning of the document and read to exclude the BOM
+            // Example: UTF BOM is 3 bytes in length.. So we set the byte order mark to be 3
             byte[] preamble = _settings.baseEncoding.GetPreamble();
             int preambleLen = preamble.Length;
             int i;
-            for (i = 0; i < preambleLen && i < _state.bytesUsed; i++)
+            for (i = 0; i < preambleLen && i < _state.bytesRead; i++)
             {
                 if (_state.bytes[i] != preamble[i])
                 {
                     break;
                 }
             }
-            if (i == preambleLen)
-            {
-                _state.bytePos = preambleLen;
-            }
-            _settings.documentStartPos = _state.bytePos;
+            _settings.documentStartPos = i; 
+            GetChars(_settings.documentStartPos);
+            ReadData();
         }
 
         private int _calculateBufferSize(Stream stream)
@@ -202,13 +191,14 @@ namespace SimpleXML
                 long len = stream.Length;
                 if (len < _maximumBufferSize)
                 {
-                    return checked((int)len);
+                    bufferSize = checked((int)len);
                 }
                 else
                 {
-                    return _hugeBufferSize;
+                    bufferSize = _hugeBufferSize;
                 }
             }
+            _settings.streamLength = stream.Length;
             return bufferSize;
         }
 
@@ -244,7 +234,7 @@ namespace SimpleXML
             if (encoding == null)
             {
                 _settings.baseEncoding = new UTF8Encoding(true, false);
-                _settings.baseDecoder = new SafeAsciiDecoder();
+                _settings.baseDecoder = _settings.baseEncoding.GetDecoder();
             }
             else
             {
@@ -254,80 +244,55 @@ namespace SimpleXML
         }
         // End Initialization Methods
 
-
         // Start Buffer Allocation & Character Decoding
-        // This is the Method copied form XmlTextReaderImpl.
-        // I kept it here for archiving Purposes.
-        private int ReadData()
+        private bool ReadData()
         {
-            if (_state.EOF == false) {
-                return 0;
+            if (!_state.EOF) 
+            {
+                _state.bytesRead = _settings.baseStream.Read(_state.bytes, 0, _state.bytes.Length);
+                GetChars();
+                return true;
+            } 
+            else 
+            {
+                return false;
             }
-
-
-            return 0;
         }
 
-        private void InvalidCharRecovery(ref int bytesCount, out int charsCount)
-        {
-            int charsDecoded = 0;
-            int bytesDecoded = 0;
-            try
-            {
-                while (bytesDecoded < bytesCount)
-                {
-                    int chDec;
-                    int bDec;
-                    bool completed;
-                    _settings.baseDecoder.Convert(_state.bytes, _state.bytePos + bytesDecoded, 1, _state.chars, _state.charsUsed + charsDecoded, 1, false, out bDec, out chDec, out completed);
-                    charsDecoded += chDec;
-                    bytesDecoded += bDec;
-                }
-            }
-            catch (ArgumentException)
-            {
-            }
+        private void GetChars(int offset) => GetChars(_state.bytes, offset);
 
-            if (charsDecoded == 0)
+        private void GetChars() => GetChars(_state.bytes, 0);
+
+        private void GetChars(byte[] from, int offset)
+        {
+            if (_state.bytesRead != 0)
             {
-                throw new Exceptions.InvalidCharException("Konnte keine Zeichen lesen.");
+                int bytesUsed;
+                int charsUsed;
+                bool completed;
+                _settings.baseDecoder.Convert(from, offset,  _state.bytesRead - offset, _state.chars, 0, _state.chars.Length, false, out bytesUsed, out charsUsed, out completed);
+                _state.bytesUsed += bytesUsed;
+                var hans = new char[charsUsed];
+                for (int i = 0; i < charsUsed; i++)
+                {
+                    hans[i] = _state.chars[i];
+                }            
+                //File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
             }
-            charsCount = charsDecoded;
-            bytesCount = bytesDecoded;
+            else
+            {
+                _state.EOF = true;
+            }
         }
         // End Buffer Allocation & Character Encoding
 
 
         // Start Helper Methods
-        // Copied from XmlTextReaderImpl --> do we need it?
-        internal class SafeAsciiDecoder : Decoder
-        {
 
-            public SafeAsciiDecoder() { }
-
-            public override int GetCharCount(byte[] bytes, int index, int count) => count;
-
-            public override int GetChars(byte[] bytes, int byteIndex, int byteCount, char[] chars, int charIndex)
-            {
-                int i = byteIndex;
-                int j = charIndex;
-                while (i < byteIndex + byteCount)
-                {
-                    chars[j++] = (char)bytes[i++];
-                }
-                return byteCount;
-            }
-        }
-
-        internal static void BlockCopyChars(char[] src, int srcOffset, char[] dst, int dstOffset, int count)
-            => Buffer.BlockCopy(src, srcOffset * sizeof(char), dst, dstOffset * sizeof(char), count * sizeof(char));
-
-        internal static void BlockCopy(byte[] src, int srcOffset, byte[] dst, int dstOffset, int count)
-            => Buffer.BlockCopy(src, srcOffset, dst, dstOffset, count);
         // End Helper Methods
 
 
-        // Start IDisosable Implementation
+        // Start IDisposable Implementation
         void IDisposable.Dispose()
         {
             _state.close();

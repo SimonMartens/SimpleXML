@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Xml;
 using System.Xml.Linq;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace SimpleXML_term
 {
@@ -16,20 +17,27 @@ namespace SimpleXML_term
         static string UTF8uri = @"C:\Users\Simon\Documents\GitHub\Hamann\XML_Aktuell\2019-03-07\HAMANN-UTF8BOM.xml";
         static void Main(string[] args)
         {
+            bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                UTF16uri = @"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml";
+                UTF8uri = UTF16uri;
+            }
+
             sleep();
             TestSXML(UTF16uri);
-            sleep();
-            TestXmlTextReader(UTF8uri);
-            sleep();
-            TestXmlReader(UTF8uri);
-            sleep();
-            TestLinq(UTF8uri);
-            sleep();
-            TestStreamReading(UTF16uri);
+            // sleep();
+            // TestXmlTextReader(UTF8uri);
+            // sleep();
+            // TestXmlReader(UTF8uri);
+            // sleep();
+            // TestLinq(UTF8uri);
+            // sleep();
+            // TestStreamReading(UTF16uri);
             // Console.ReadKey();
         }
 
-        public static void sleep() => Thread.Sleep(4000);
+        public static void sleep() => Thread.Sleep(2000);
 
         public static void TestSXML(string uri)
         {
