@@ -26,14 +26,13 @@ namespace SimpleXML_term
 
             sleep();
             TestSXML(UTF16uri);
-            // sleep();
-            // TestXmlTextReader(UTF8uri);
-            // sleep();
-            // TestXmlReader(UTF8uri);
-            // sleep();
-            // TestLinq(UTF8uri);
-            // sleep();
-            // TestStreamReading(UTF16uri);
+            sleep();
+            TestXmlTextReader(UTF8uri);
+            sleep();
+            TestXmlReader(UTF8uri);
+            sleep();
+            TestLinq(UTF8uri);
+            sleep();
             // Console.ReadKey();
         }
 
@@ -44,11 +43,11 @@ namespace SimpleXML_term
             stopwatch = new Stopwatch();
             MemoryStream ms = new MemoryStream(File.ReadAllBytes(uri), 0, Convert.ToInt32(new FileInfo(uri).Length));
             stopwatch.Start();
-            using (SimpleDoc reader = new SimpleDoc(ms))
-            {
-                reader._testRead();
-                stopwatch.Stop();
-            }
+            SimpleDoc reader = new SimpleDoc();
+            reader.Load(ms);
+            reader._testRead();
+            stopwatch.Stop();
+            reader.Close();
             ms.Close();
             Console.WriteLine("SimpleXML: " + stopwatch.ElapsedMilliseconds.ToString());
         }
@@ -95,11 +94,6 @@ namespace SimpleXML_term
             XDocument doc = XDocument.Load(uri);
             stopwatch.Stop();
             Console.WriteLine("Linq: " + stopwatch.ElapsedMilliseconds.ToString());
-
-        }
-
-        public static void TestStreamReading(string uri)
-        {
 
         }
 

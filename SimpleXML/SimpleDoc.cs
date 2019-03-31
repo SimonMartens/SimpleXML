@@ -8,116 +8,67 @@ using System.Collections.Generic;
 
 namespace SimpleXML
 {
-    public class SimpleDoc : IDisposable
+    // SimpleXML will be a fast and event-based SAX-Parser for C# Core (forward-only, no DOM). Goals and objectives:
+    //      - almost all exceptions are to be avoided. Instead raise lots of events, which can be subscribed to optionally.
+    //      - a great level of detail to event raising => ability to parse invalid XML at the same time allowing it's detection and handling
+    //      - support for ASCII, UTF-8, UTF-16, UTF-32 character sets
+    //      - support for XML 1.0
+    //      - xml schema validation
+    //      - keep it fast and the memory footprint of the parser to 16 (or 32, with complete file in buffer) kB max. when operating with streams
+
+    // No links will be followed for security reasons.
+    // Done:
+    //  - input and buffering via stream
+    //  - testing of speed & event-based interface
+    public partial class SimpleDoc : SXMLParser, IDisposable
     {
-        // Start Fields
-        // Start Constants
-        // Remember to call the WINDOWS Read() API as few times as possible
-        private const int _defaultBufferSize = 4096 * 2;
-        private const int _hugeBufferSize = 4096 * 4;
-        private const int _maximumBufferSize = 4096 * 8;
-        private const int _maximumByteSequenceLength = 6; // A read sequence has the maximum meaningful length of 6 bytes (more likely to be <= 4)
-        private const int _approxXMLDeclLength = 80; // About the Length of an XML declaration
-        private const int _maxBytesToMove = 128;
-        // End Constants
-
-        // Settings
-        private SettingsData _settings;
-        private StateData _state;
-        // End Settings
-        // End Fields
-
-
-        // Start Custom Data Types
-        // Handles the initialisation of Data, is a struct to keep it on the stack
-        internal struct SettingsData
-        {
-            internal Uri baseUri;
-            internal Stream baseStream;
-            internal Encoding baseEncoding;
-            internal Decoder baseDecoder;
-            internal bool fullyBuffered;
-            internal int documentStartPos;
-            internal long streamLength;
-            internal void clear()
-            {
-                baseUri = null;
-                baseStream = null;
-                baseEncoding = null;
-                baseDecoder = null;
-                fullyBuffered = false;
-                streamLength = 0;
-                documentStartPos = 0;
-            }
-            internal void close()
-            {
-                baseStream.Close();
-                clear();
-            }
-        }
-
-        // Handles a simple state, such as parsing position, is a struct to keep it on the stack
-        internal struct StateData
-        {
-            // Position mangement
-            
-
-            // Byte buffer
-            // increases speed and decreases memory footprint of the parser
-            internal byte[] bytes;
-            // Bytes converted into char overall
-            internal int bytesUsed;
-            // Bytes read from stream last time
-            internal int bytesRead;
-            
-            // Handles EOF
-            internal bool EOF;
-
-            // Character buffer
-            // It's good to use a buffer to increase speed and and minimize the amout of systemcalls neccessary
-            internal char[] chars;
-            internal int charsUsed;
-
-            internal void clear()
-            {
-                bytes = null;
-                chars = null;
-                bytesUsed = 0; 
-                charsUsed = 0;
-                EOF = false;
-            }
-            internal void close() => clear();
-        }
-        // End Custom Data Types
-
+        // All fields and data types are declared in the base class, SXMLParser
 
         // Start Constructors
+        // 0. Possibility: no input - preferred. It ist possible to subscribe to events before initializing
+        //                 to catch all initialization errors; load date with the public Load() method.
+        public SimpleDoc() { }
+
         // 1. Possibility: input of a stream; passes control over memory management to user
         public SimpleDoc(Stream stream) : this((Uri)null, stream) { }
 
         public SimpleDoc(Uri uri) : this(uri, (Stream)null) { }
 
-        public SimpleDoc(Uri uri, Stream stream) : this(uri, stream, (byte[])null) { }
+        public SimpleDoc(Uri uri, Stream stream) { this._initDoc(uri, stream, (byte[])null); }
 
 
         // 2. Possibility: Input of a byte array to be used as buffer -- reading is taking place somewhere else
         public SimpleDoc(byte[] bytes) : this((Uri)null, bytes) { }
 
-        public SimpleDoc(Uri uri, byte[] bytes) : this(uri, (Stream)null, bytes) { }
+        public SimpleDoc(Uri uri, byte[] bytes) { this._initDoc(uri, (Stream)null, bytes); }
         // End Constructors
 
         // Start Exposed Methods
-        int rounds = 0; // Test Variable
+        // Pass data if empty constructor was used
+        public void Load(Stream stream)
+        {
+            this._initDoc((Uri)null, stream, (byte[])null);
+        }   
+
         public void _testRead()
         {
+            
             while (ReadData())
             ;;
         }
+
+        public void Close()
+        {
+            _settings.close();
+            _state.close();
+        }
         // End Exposed Methods
 
-        // Start Private Constructors
-        private SimpleDoc(Uri uri, Stream stream, byte[] buffer)
+        // Start Initialization Methods
+        private void _initDoc(Uri uri, Stream stream, byte[] buffer)
         {
+            // End Initialization of event engine
+            
             if (uri != null)
                 this._settings.baseUri = uri;
             if (stream != null)
@@ -126,15 +77,12 @@ namespace SimpleXML
                 if (buffer != null)
                     _state.bytes = buffer;
                 else
-                    // TO FIX: INTERPRET AS EOF
+                    // TO FIX: INTERPRET AS INSTANT EOF
                     throw new Exceptions.ArgumentNullException("The given Stream is null, there's nothing to read here.");
 
             _initStream(stream);
         }
-        // End Private Constructors
 
-
-        // Start Initialization Methods
         private void _initStream(Stream stream)
         {
             // First we allocate a buffer. The buffer allocation and Encoding Detection is pretty much
@@ -149,8 +97,8 @@ namespace SimpleXML
             if (_state.chars == null || _state.chars.Length < bufferSize + 1)
                 _state.chars = new char[bufferSize]; // Hier wurde +1 aufgerechnet (why tho?)
 
-            // Getting at least 4 bytes to detect encoding (max. UTF-16)
-            while ( _state.bytesRead < 4 && _state.bytes.Length - _state.bytesUsed > 0)
+            // Getting 4 bytes to detect encoding (max. UTF-32)
+            while ( _state.bytesRead < 4 && _state.bytes.Length - _state.bytesRead > 0)
             {
                 int read = stream.Read(_state.bytes, _state.bytesRead, 1);
                 if (read == 0)
@@ -159,7 +107,6 @@ namespace SimpleXML
                     break;
                 }
                 _state.bytesRead += read;
-                
             }
 
             // Detecting and setting the encoding
@@ -178,11 +125,19 @@ namespace SimpleXML
                     break;
                 }
             }
-            _settings.documentStartPos = i; 
+
+            // Initialize the three Parsers
+            _parser = new Parser();
+            // Setting the start of the document and getting the chars for it -- without the BOM, which is not
+            // of use now that the enconding detection took place. But we still must parse the characters read
+            // above, in case the BOM was less then 4 bytes long. So GetChars() is called here.
+            _settings.documentStartPos = i;
+            Events.RaiseStartUpComplete();
             GetChars(_settings.documentStartPos);
-            ReadData();
+            
         }
 
+        // Method for calculating the buffer size; adjustong to stream length im neccessary
         private int _calculateBufferSize(Stream stream)
         {
             int bufferSize = _defaultBufferSize;
@@ -198,7 +153,6 @@ namespace SimpleXML
                     bufferSize = _hugeBufferSize;
                 }
             }
-            _settings.streamLength = stream.Length;
             return bufferSize;
         }
 
@@ -207,9 +161,9 @@ namespace SimpleXML
         private Encoding _detectEncoding()
         {
             // One byte used means it must be ASCII, and not well formed
-            int first2Bytes = (_state.bytesUsed >= 2) ? (_state.bytes[0] << 8 | _state.bytes[1]) : 0;
-            int first3Bytes = (_state.bytesUsed >= 3) ? (first2Bytes << 8 | _state.bytes[2]) : 0;
-            int first4Bytes = (_state.bytesUsed >= 4) ? (first3Bytes << 8 | _state.bytes[3]) : 0;
+            int first2Bytes = (_state.bytesRead >= 2) ? (_state.bytes[0] << 8 | _state.bytes[1]) : 0;
+            int first3Bytes = (_state.bytesRead >= 3) ? (first2Bytes << 8 | _state.bytes[2]) : 0;
+            int first4Bytes = (_state.bytesRead >= 4) ? (first3Bytes << 8 | _state.bytes[3]) : 0;
 
 
             if (first4Bytes == Characters.UTF32LEBOM)
@@ -233,11 +187,13 @@ namespace SimpleXML
         {
             if (encoding == null)
             {
+                // As defined in the XML Spec, UTF-8 is standard
                 _settings.baseEncoding = new UTF8Encoding(true, false);
                 _settings.baseDecoder = _settings.baseEncoding.GetDecoder();
             }
             else
             {
+                // Get decoder, if an encoding was detected
                 _settings.baseEncoding = encoding;
                 _settings.baseDecoder = encoding.GetDecoder();
             }
@@ -245,6 +201,11 @@ namespace SimpleXML
         // End Initialization Methods
 
         // Start Buffer Allocation & Character Decoding
+        // This method copies data into the buffer.
+        // Returns false if EOF -- stores the number of read bytes into _state.bytesRead.
+        // This is neccessary, so we know how many bytes need conversion in GetChar(), which, at the end
+        // of the file differs from the byte-buffer-size.
+        // The number of bytes actually read and needing conversion is stored in _state.bytesRead
         private bool ReadData()
         {
             if (!_state.EOF) 
@@ -259,30 +220,43 @@ namespace SimpleXML
             }
         }
 
+        // This method allows for a certain offset, essentially allowing to skip bytes that don't need
+        //  conversion into chars. It is used during initialization, since the BOM needs to be skipped.
         private void GetChars(int offset) => GetChars(_state.bytes, offset);
 
         private void GetChars() => GetChars(_state.bytes, 0);
 
+        // Converts the bytes to characters and stores the result into the char-buffer.
+        // Stores the number of bytes, that were actually used in the conversion.
+        // TODO: WHAT ABOUT 4-BYTE-SEQUENCES that get split?
+        // Stores the number of chars in the char buffer that are of significance, since the buffer does not get
+        // filled up neccessarily, esp during the end of the file.
+        // The number of chars that were read and need parsing is stored in _state.charsRead.
         private void GetChars(byte[] from, int offset)
         {
             if (_state.bytesRead != 0)
             {
                 int bytesUsed;
-                int charsUsed;
+                int charsRead;
                 bool completed;
-                _settings.baseDecoder.Convert(from, offset,  _state.bytesRead - offset, _state.chars, 0, _state.chars.Length, false, out bytesUsed, out charsUsed, out completed);
+                _settings.baseDecoder.Convert(from, offset, _state.bytesRead - offset, _state.chars, 0, _state.chars.Length, false, out bytesUsed, out charsRead, out completed);
                 _state.bytesUsed += bytesUsed;
-                var hans = new char[charsUsed];
-                for (int i = 0; i < charsUsed; i++)
-                {
-                    hans[i] = _state.chars[i];
-                }            
-                //File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
+                // _state.charsUsed += charsRead; charsUsed should store already parsed chars for syncronisation later on
+                _state.charsRead = charsRead;
+
+                // TEST:
+                // var hans = new char[charsRead];
+                // for (int i = 0; i < charsRead; i++)
+                // {
+                //     hans[i] = _state.chars[i];
+                // }            
+                // File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
             }
             else
             {
                 _state.EOF = true;
             }
+
         }
         // End Buffer Allocation & Character Encoding
 
