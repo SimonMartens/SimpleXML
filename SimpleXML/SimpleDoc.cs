@@ -50,32 +50,51 @@ namespace SimpleXML
             this._initDoc((Uri)null, stream, (byte[])null);
         }   
 
+        private Element _el = new Element();
         public void _testRead()
         {
-            while (ReadData())
+            for (;;)
             {
-                bool skip = false;
-                for (int i = 0; i <= _state.charsRead; ++i)
+                if (!_state.EOF)
                 {
-                    char currChar = _state.chars[i];
-                    if (currChar == 0x20 || currChar == 0x9 || currChar == 0xD || currChar ==  0xA) 
+                    if (_state.chars[_state.charToParse] == '<')
                     {
-                        if (skip)
-                            continue;
-                        else 
+                        _increment();
+                        if (_state.chars[_state.charToParse] == '/') 
                         {
-                            _sb.Append(' ');
-                            skip = true;
+                            _increment();
+                            while (_state.chars[_state.charToParse] != ' ' && _state.chars[_state.charToParse] != '>')
+                            {
+                                _sb.Append(_state.chars[_state.charToParse]);
+                                _increment();
+                            }
+                            _el.Type = TagType.close;
+                            _sbFlush(_el);
+                        }
+                        else if (_state.chars[_state.charToParse] == '?')
+                        {
+                        }
+                        else if (_state.chars[_state.charToParse] == '!')
+                        {
+                        }
+                        else
+                        {   
+                            while (_state.chars[_state.charToParse] != ' ' && _state.chars[_state.charToParse] != '>')
+                            {
+                                _sb.Append(_state.chars[_state.charToParse]);
+                                _increment();
+                            }
+                            _el.Type = TagType.open;
+                            _sbFlush(_el);
                         }
                     }
-                    else
-                    {
-                        _sb.Append(currChar);
-                        skip = false;
-                    }
+                    _increment();
+                }
+                else
+                {
+                    break;
                 }
             }
-            File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", _sb.ToString());
         }
         // End Exposed Methods
 
@@ -141,15 +160,13 @@ namespace SimpleXML
                 }
             }
 
-            // Initialize the three Parsers
-            _parser = new Parser();
             // Setting the start of the document and getting the chars for it -- without the BOM, which is not
             // of use now that the enconding detection took place. But we still must parse the characters read
             // above, in case the BOM was less then 4 bytes long. So GetChars() is called here.
             _settings.documentStartPos = i;
             MgmtEvents.RaiseStartUpComplete();
             GetChars(_settings.documentStartPos);
-            
+            _testRead();
         }
 
         // Method for calculating the buffer size; adjustong to stream length im neccessary
@@ -260,23 +277,37 @@ namespace SimpleXML
                 // Amount of meaningful chars from this batch
                 _state.charsRead = charsRead;
                 // Reset position of character to-parse
-                _state.charToParse = 0;
-
-                
-                // var hans = new char[charsRead];
-                // for (int i = 0; i < charsRead; i++)
-                // {
-                //     hans[i] = _state.chars[i];
-                // }            
-                //  File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
-            }
+                _state.charToParse = 0;            }
             else
             {
                 _state.EOF = true;
             }
-
         }
         // End Buffer Allocation & Character Encoding
+
+        private SXML_EventArgs _sbFlush(SXML_EventArgs arg)
+        {
+            if (arg is Element)
+            {
+                var elem = arg as Element;
+                elem.Name = _sb.ToString();
+                _sb.Clear();
+            }
+            arg.Raise(this);
+            return arg;
+        }
+
+        private void _increment()
+        {
+            if (_state.charToParse == _state.charsRead)
+            {
+                ReadData();
+            }
+            else
+            {
+                ++_state.charToParse;
+            }
+        }
     }
 }
 

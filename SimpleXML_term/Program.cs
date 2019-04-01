@@ -45,8 +45,9 @@ namespace SimpleXML_term
             stopwatch.Start();
             SimpleDoc reader = new SimpleDoc();
             reader.MgmtEvents.StartUpComplete += AcceptStartup;
+            reader.ParseEvents.OTag += AcceptOTag;
+            reader.ParseEvents.CTag += AcceptCTag;
             reader.Load(ms);
-            reader._testRead();
             stopwatch.Stop();
             reader.Close();
             ms.Close();
@@ -112,6 +113,18 @@ namespace SimpleXML_term
         public static void AcceptStartup(object sender, EventArgs args)
         {
             Console.WriteLine("Startup complete!");
+        }
+
+        public static void AcceptOTag(object sender, EventArgs arg)
+        {
+            // var a = arg as Element;
+            // Console.WriteLine(a.Name + " opened.");
+        }
+
+        public static void AcceptCTag(object sender, EventArgs arg)
+        {
+            // var a = arg as Element;
+            // Console.WriteLine(a.Name + " closed.");
         }
     }
 }
