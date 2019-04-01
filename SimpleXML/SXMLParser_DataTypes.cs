@@ -61,10 +61,12 @@ namespace SimpleXML
             // Character buffer
             // It's good to use a buffer to increase speed and and minimize the amout of systemcalls neccessary
             internal char[] chars;
-            // Number of chars overall
+            // Number of chars already parsed
             internal int charsUsed;
-            // Chars read from bytes kast time
+            // Chars read from bytes last time
             internal int charsRead;
+            // Pointer to char currently toParse
+            internal int charToParse;
 
             // Handles EOF
             internal bool EOF;

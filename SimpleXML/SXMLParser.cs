@@ -2,7 +2,7 @@ namespace SimpleXML
 {
     public abstract partial class SXMLParser 
     {
-        // This class mainly contains:
+        // This class contains:
         //      - the fields and constants to be used from a SXML parser
         //        in SXMLParser_Fields.cs 
         //      - custom data types to be used from a SXML parser
@@ -11,5 +11,7 @@ namespace SimpleXML
         //        in SXMLParser_Events.cs
         //      - exceptions raised by a SXML-Parser
         //        in SXMLParser_Exceptions.cs
+        //      - helper methods to be used in a SXML-parser
+        //        in SXMLParser_Methods.cs
     }
 }

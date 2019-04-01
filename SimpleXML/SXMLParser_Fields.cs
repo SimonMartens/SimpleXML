@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 
 namespace SimpleXML
 {
@@ -6,25 +7,31 @@ namespace SimpleXML
     {
         // Fields and constants to be used in a SXML-Parser
 
-        // Start Fields
-        // Start Constants
-        // Remember to call the WINDOWS Read() API as few times as possible
+        // Start fields
+        // Start constants
         internal const int _defaultBufferSize = 4096 * 2;
         internal const int _hugeBufferSize = 4096 * 4;
         internal const int _maximumBufferSize = 4096 * 8;
-        internal const int _maximumByteSequenceLength = 6; // A read sequence has the maximum meaningful length of 6 bytes (more likely to be <= 4)
-        internal const int _approxXMLDeclLength = 80; // About the Length of an XML declaration
         internal const int _maxBytesToMove = 128;
-        // End Constants
+        // End constants
 
         // Settings
         internal SettingsData _settings;
         internal StateData _state;
         internal Parser _parser;
-        // End Settings
+        // End settings
+
+        // Current Value of String
+        internal StringBuilder _sb = new StringBuilder();
+
+        // Exposed fields
+        public SXMLOnErrorEvents ErrorEvents = new SXMLOnErrorEvents();
+        public SXMLOnManagementEvents MgmtEvents = new SXMLOnManagementEvents();
+        public SXMLOnParseEvents ParseEvents = new SXMLOnParseEvents();
+        // End exposed fields
         // End Fields
 
-        // Character-Table
+        // Start character-table
         internal static class Characters
         {
             public static readonly uint UTF8BOM = 0xEFBBBF;
@@ -35,5 +42,6 @@ namespace SimpleXML
             public static readonly uint UTF16BRACKET = 0x003C;
             public static readonly uint OBRACKET = 0x3C;
         }
+        // End character-table
     }
 }

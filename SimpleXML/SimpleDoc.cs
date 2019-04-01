@@ -52,15 +52,30 @@ namespace SimpleXML
 
         public void _testRead()
         {
-            
             while (ReadData())
-            ;;
-        }
-
-        public void Close()
-        {
-            _settings.close();
-            _state.close();
+            {
+                bool skip = false;
+                for (int i = 0; i <= _state.charsRead; ++i)
+                {
+                    char currChar = _state.chars[i];
+                    if (currChar == 0x20 || currChar == 0x9 || currChar == 0xD || currChar ==  0xA) 
+                    {
+                        if (skip)
+                            continue;
+                        else 
+                        {
+                            _sb.Append(' ');
+                            skip = true;
+                        }
+                    }
+                    else
+                    {
+                        _sb.Append(currChar);
+                        skip = false;
+                    }
+                }
+            }
+            File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", _sb.ToString());
         }
         // End Exposed Methods
 
@@ -132,7 +147,7 @@ namespace SimpleXML
             // of use now that the enconding detection took place. But we still must parse the characters read
             // above, in case the BOM was less then 4 bytes long. So GetChars() is called here.
             _settings.documentStartPos = i;
-            Events.RaiseStartUpComplete();
+            MgmtEvents.RaiseStartUpComplete();
             GetChars(_settings.documentStartPos);
             
         }
@@ -240,17 +255,20 @@ namespace SimpleXML
                 int charsRead;
                 bool completed;
                 _settings.baseDecoder.Convert(from, offset, _state.bytesRead - offset, _state.chars, 0, _state.chars.Length, false, out bytesUsed, out charsRead, out completed);
+                // Amount of already converted bytes
                 _state.bytesUsed += bytesUsed;
-                // _state.charsUsed += charsRead; charsUsed should store already parsed chars for syncronisation later on
+                // Amount of meaningful chars from this batch
                 _state.charsRead = charsRead;
+                // Reset position of character to-parse
+                _state.charToParse = 0;
 
-                // TEST:
+                
                 // var hans = new char[charsRead];
                 // for (int i = 0; i < charsRead; i++)
                 // {
                 //     hans[i] = _state.chars[i];
                 // }            
-                // File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
+                //  File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", String.Join("", hans));
             }
             else
             {
@@ -259,20 +277,6 @@ namespace SimpleXML
 
         }
         // End Buffer Allocation & Character Encoding
-
-
-        // Start Helper Methods
-
-        // End Helper Methods
-
-
-        // Start IDisposable Implementation
-        void IDisposable.Dispose()
-        {
-            _state.close();
-            _settings.close();
-        }
-        // End IDisposable Implementation
     }
 }
 

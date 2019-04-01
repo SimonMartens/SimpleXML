@@ -23,7 +23,7 @@ namespace SimpleXML_term
                 UTF16uri = @"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml";
                 UTF8uri = UTF16uri;
             }
-
+            
             sleep();
             TestSXML(UTF16uri);
             sleep();
@@ -44,6 +44,7 @@ namespace SimpleXML_term
             MemoryStream ms = new MemoryStream(File.ReadAllBytes(uri), 0, Convert.ToInt32(new FileInfo(uri).Length));
             stopwatch.Start();
             SimpleDoc reader = new SimpleDoc();
+            reader.MgmtEvents.StartUpComplete += AcceptStartup;
             reader.Load(ms);
             reader._testRead();
             stopwatch.Stop();
@@ -79,7 +80,7 @@ namespace SimpleXML_term
             {
                 while (xr.Read())
                 {
-
+                    
                 }
             }
             stopwatch.Stop();
@@ -106,6 +107,11 @@ namespace SimpleXML_term
             writer.Flush();
             stream.Position = 0;
             return stream;
+        }
+
+        public static void AcceptStartup(object sender, EventArgs args)
+        {
+            Console.WriteLine("Startup complete!");
         }
     }
 }

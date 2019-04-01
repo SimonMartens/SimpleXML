@@ -4,23 +4,52 @@ namespace SimpleXML
 {
     public abstract partial class SXMLParser
     {
-        public static class Events {
+        public abstract class SXMLEvents 
+        {
             // Events to be invoked from a SXML-Parser
-            // Methods to invoke these events safely from derived parsers
+            // Plus methods to invoke these events safely from derived parsers
+            // There are three derived classes:
+            //  - SXMLOnErrorEvents: are called on recoverable errors and malformed XML
+            //  - SXMLOnManagementEvents: are called in management-related functions, lik initialization and buffering
+            //  - SXMLOnParseEvents: are events called in parsing methods
 
+            // Shortcut method to safely call an event
+            internal Action<EventHandler, EventArgs> Invoke = (e, ea) => {
+                EventHandler y = e;
+                if (y != null)
+                    y.Invoke(null, ea);
+            };
+        }
+
+        public class SXMLOnErrorEvents : SXMLEvents
+        {
+
+        }
+
+        public class SXMLOnManagementEvents : SXMLEvents
+        {
             // Start event fields
-            public static event EventHandler StartUpComplete;
-            public static event EventHandler ByteBufferReload;
-            public static event EventHandler CharBufferReload;
+            public event EventHandler ByteBufferReload;
+            public event EventHandler CharBufferReload;
+            public event EventHandler StartUpComplete;
             // End event fields
 
             // Start event invoking methods
-            public static void RaiseStartUpComplete() { 
-                EventHandler startUpComplete = StartUpComplete;
-                if (startUpComplete != null)
-                    startUpComplete(null, EventArgs.Empty);
-            }
+            public void RaiseStartUpComplete() => Invoke(StartUpComplete, EventArgs.Empty);
             // End event invoking methods
+        }
+
+        public class SXMLOnParseEvents : SXMLEvents
+        {
+            public event EventHandler OTag;
+            public event EventHandler CTag;
+            public event EventHandler Text;
+            public event EventHandler Elem;
+
+            public void RaiseOTag(EventArgs ea) => Invoke(OTag, ea);
+            public void RaiseCTag(EventArgs ea) => Invoke(CTag, ea);
+            public void RaiseText(EventArgs ea) => Invoke(Text, ea);
+            public void RaiseElem(EventArgs ea) => Invoke(Elem, ea);
         }
     }
 }
