@@ -1,10 +1,12 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using System.Xml;
 using System.Collections.Generic;
+#if DEBUG
+using System.Diagnostics;
+#endif
 
 namespace SimpleXML
 {
@@ -12,7 +14,7 @@ namespace SimpleXML
     //      - almost all exceptions are to be avoided. Instead raise lots of events, which can be subscribed to optionally.
     //      - a great level of detail to event raising => ability to parse invalid XML at the same time allowing it's detection and handling
     //      - support for ASCII, UTF-8, UTF-16, UTF-32 character sets
-    //      - support for XML 1.0
+    //      - support for XML 1.0 -- including namespacess
     //      - xml schema validation
     //      - keep it fast and the memory footprint of the parser to 16 (or 32, with complete file in buffer) kB max. when operating with streams
 
@@ -29,18 +31,19 @@ namespace SimpleXML
         //                 to catch all initialization errors; load date with the public Load() method.
         public SimpleDoc() { }
 
+        // All other methods are not maintained and are therefore disabled
         // 1. Possibility: input of a stream; passes control over memory management to user
-        public SimpleDoc(Stream stream) : this((Uri)null, stream) { }
+        // public SimpleDoc(Stream stream) : this((Uri)null, stream) { }
 
-        public SimpleDoc(Uri uri) : this(uri, (Stream)null) { }
+        // public SimpleDoc(Uri uri) : this(uri, (Stream)null) { }
 
-        public SimpleDoc(Uri uri, Stream stream) { this._initDoc(uri, stream, (byte[])null); }
+        // public SimpleDoc(Uri uri, Stream stream) { this._initDoc(uri, stream, (byte[])null); }
 
 
-        // 2. Possibility: Input of a byte array to be used as buffer -- reading is taking place somewhere else
-        public SimpleDoc(byte[] bytes) : this((Uri)null, bytes) { }
+        // // 2. Possibility: Input of a byte array to be used as buffer -- reading is taking place somewhere else
+        // public SimpleDoc(byte[] bytes) : this((Uri)null, bytes) { }
 
-        public SimpleDoc(Uri uri, byte[] bytes) { this._initDoc(uri, (Stream)null, bytes); }
+        // public SimpleDoc(Uri uri, byte[] bytes) { this._initDoc(uri, (Stream)null, bytes); }
         // End Constructors
 
         // Start Exposed Methods
@@ -48,53 +51,14 @@ namespace SimpleXML
         public void Load(Stream stream)
         {
             this._initDoc((Uri)null, stream, (byte[])null);
-        }   
+        }
 
-        private Element _el = new Element();
         public void _testRead()
         {
-            for (;;)
-            {
-                if (!_state.EOF)
-                {
-                    if (_state.chars[_state.charToParse] == '<')
-                    {
-                        _increment();
-                        if (_state.chars[_state.charToParse] == '/') 
-                        {
-                            _increment();
-                            while (_state.chars[_state.charToParse] != ' ' && _state.chars[_state.charToParse] != '>')
-                            {
-                                _sb.Append(_state.chars[_state.charToParse]);
-                                _increment();
-                            }
-                            _el.Type = TagType.close;
-                            _sbFlush(_el);
-                        }
-                        else if (_state.chars[_state.charToParse] == '?')
-                        {
-                        }
-                        else if (_state.chars[_state.charToParse] == '!')
-                        {
-                        }
-                        else
-                        {   
-                            while (_state.chars[_state.charToParse] != ' ' && _state.chars[_state.charToParse] != '>')
-                            {
-                                _sb.Append(_state.chars[_state.charToParse]);
-                                _increment();
-                            }
-                            _el.Type = TagType.open;
-                            _sbFlush(_el);
-                        }
-                    }
-                    _increment();
-                }
-                else
-                {
-                    break;
-                }
-            }
+            while (! _bufferState.EOF)
+                _parse();
+            //Console.WriteLine(_parseState.sb.ToString());
+            //File.AppendAllText(@"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml.out", _parseState.sb.ToString());
         }
         // End Exposed Methods
 
@@ -109,7 +73,7 @@ namespace SimpleXML
                 this._settings.baseStream = stream;
             else
                 if (buffer != null)
-                    _state.bytes = buffer;
+                    _bufferState.bytes = buffer;
                 else
                     // TO FIX: INTERPRET AS INSTANT EOF
                     throw new Exceptions.ArgumentNullException("The given Stream is null, there's nothing to read here.");
@@ -125,22 +89,22 @@ namespace SimpleXML
             int bufferSize = _calculateBufferSize(stream);
 
             // Allocating byte buffer
-            if (_state.bytes == null || _state.bytes.Length < bufferSize)
-                _state.bytes = new byte[ bufferSize ];
+            if (_bufferState.bytes == null || _bufferState.bytes.Length < bufferSize)
+                _bufferState.bytes = new byte[ bufferSize ];
             // Allocating char buffer
-            if (_state.chars == null || _state.chars.Length < bufferSize + 1)
-                _state.chars = new char[bufferSize]; // Hier wurde +1 aufgerechnet (why tho?)
+            if (_bufferState.chars == null || _bufferState.chars.Length < bufferSize + 1)
+                _bufferState.chars = new char[bufferSize]; // Hier wurde +1 aufgerechnet (why tho?)
 
             // Getting 4 bytes to detect encoding (max. UTF-32)
-            while ( _state.bytesRead < 4 && _state.bytes.Length - _state.bytesRead > 0)
+            while ( _bufferState.bytesRead < 4 && _bufferState.bytes.Length - _bufferState.bytesRead > 0)
             {
-                int read = stream.Read(_state.bytes, _state.bytesRead, 1);
+                int read = stream.Read(_bufferState.bytes, _bufferState.bytesRead, 1);
                 if (read == 0)
                 {
-                    _state.EOF = true;
+                    _bufferState.EOF = true;
                     break;
                 }
-                _state.bytesRead += read;
+                _bufferState.bytesRead += read;
             }
 
             // Detecting and setting the encoding
@@ -152,9 +116,9 @@ namespace SimpleXML
             byte[] preamble = _settings.baseEncoding.GetPreamble();
             int preambleLen = preamble.Length;
             int i;
-            for (i = 0; i < preambleLen && i < _state.bytesRead; i++)
+            for (i = 0; i < preambleLen && i < _bufferState.bytesRead; i++)
             {
-                if (_state.bytes[i] != preamble[i])
+                if (_bufferState.bytes[i] != preamble[i])
                 {
                     break;
                 }
@@ -164,9 +128,16 @@ namespace SimpleXML
             // of use now that the enconding detection took place. But we still must parse the characters read
             // above, in case the BOM was less then 4 bytes long. So GetChars() is called here.
             _settings.documentStartPos = i;
+            _initParser();
+            _getChars(i);
             MgmtEvents.RaiseStartUpComplete();
-            GetChars(_settings.documentStartPos);
-            _testRead();
+        }
+
+        private void _initParser() 
+        {
+            _parseState = new ParseStateData();
+            _parseState.clear();
+
         }
 
         // Method for calculating the buffer size; adjustong to stream length im neccessary
@@ -182,7 +153,7 @@ namespace SimpleXML
                 }
                 else
                 {
-                    bufferSize = _hugeBufferSize;
+                    bufferSize = _maximumBufferSize;
                 }
             }
             return bufferSize;
@@ -193,9 +164,9 @@ namespace SimpleXML
         private Encoding _detectEncoding()
         {
             // One byte used means it must be ASCII, and not well formed
-            int first2Bytes = (_state.bytesRead >= 2) ? (_state.bytes[0] << 8 | _state.bytes[1]) : 0;
-            int first3Bytes = (_state.bytesRead >= 3) ? (first2Bytes << 8 | _state.bytes[2]) : 0;
-            int first4Bytes = (_state.bytesRead >= 4) ? (first3Bytes << 8 | _state.bytes[3]) : 0;
+            int first2Bytes = (_bufferState.bytesRead >= 2) ? (_bufferState.bytes[0] << 8 | _bufferState.bytes[1]) : 0;
+            int first3Bytes = (_bufferState.bytesRead >= 3) ? (first2Bytes << 8 | _bufferState.bytes[2]) : 0;
+            int first4Bytes = (_bufferState.bytesRead >= 4) ? (first3Bytes << 8 | _bufferState.bytes[3]) : 0;
 
 
             if (first4Bytes == Characters.UTF32LEBOM)
@@ -234,16 +205,21 @@ namespace SimpleXML
 
         // Start Buffer Allocation & Character Decoding
         // This method copies data into the buffer.
-        // Returns false if EOF -- stores the number of read bytes into _state.bytesRead.
+        // Returns false if EOF -- stores the number of read bytes into _bufferState.bytesRead.
         // This is neccessary, so we know how many bytes need conversion in GetChar(), which, at the end
         // of the file differs from the byte-buffer-size.
-        // The number of bytes actually read and needing conversion is stored in _state.bytesRead
-        private bool ReadData()
+        // The number of bytes actually read and needing conversion is stored in _bufferState.bytesRead
+        private bool _readData()
         {
-            if (!_state.EOF) 
+            if (!_bufferState.EOF) 
             {
-                _state.bytesRead = _settings.baseStream.Read(_state.bytes, 0, _state.bytes.Length);
-                GetChars();
+                // Read the buffer, offset in bytes[] is 0, fill up the buffer
+                _bufferState.bytesRead = _settings.baseStream.Read(_bufferState.bytes, 0, _bufferState.bytes.Length);
+                // Reset position of bytes to parse, clean slate, nothing's parsed
+                _parseState.bytePos = 0;
+                _parseState.bytesUsed = 0;
+
+                _getChars();
                 return true;
             } 
             else 
@@ -254,58 +230,58 @@ namespace SimpleXML
 
         // This method allows for a certain offset, essentially allowing to skip bytes that don't need
         //  conversion into chars. It is used during initialization, since the BOM needs to be skipped.
-        private void GetChars(int offset) => GetChars(_state.bytes, offset);
+        private void _getChars(int offset) => _getChars(_bufferState.bytes, offset);
 
-        private void GetChars() => GetChars(_state.bytes, 0);
+        // Standard call to _getChars with an offset of zero
+        private void _getChars() => _getChars(_bufferState.bytes, 0);
 
         // Converts the bytes to characters and stores the result into the char-buffer.
         // Stores the number of bytes, that were actually used in the conversion.
         // TODO: WHAT ABOUT 4-BYTE-SEQUENCES that get split?
         // Stores the number of chars in the char buffer that are of significance, since the buffer does not get
         // filled up neccessarily, esp during the end of the file.
-        // The number of chars that were read and need parsing is stored in _state.charsRead.
-        private void GetChars(byte[] from, int offset)
+        // The number of chars that were read and need parsing is stored in _bufferState.charsRead.
+        private void _getChars(byte[] from, int offset)
         {
-            if (_state.bytesRead != 0)
+            if (_bufferState.bytesRead != 0)
             {
                 int bytesUsed;
                 int charsRead;
                 bool completed;
-                _settings.baseDecoder.Convert(from, offset, _state.bytesRead - offset, _state.chars, 0, _state.chars.Length, false, out bytesUsed, out charsRead, out completed);
-                // Amount of already converted bytes
-                _state.bytesUsed += bytesUsed;
+                // Convert the bytes (except for the offset) to chars, expect more
+                _settings.baseDecoder.Convert(from, offset, _bufferState.bytesRead - offset, _bufferState.chars, 0, _bufferState.chars.Length, false, out bytesUsed, out charsRead, out completed);
                 // Amount of meaningful chars from this batch
-                _state.charsRead = charsRead;
-                // Reset position of character to-parse
-                _state.charToParse = 0;            }
+                _bufferState.charsRead = charsRead;
+                // Reset position of characters to parse, clean slate, nothing's parsed
+                _parseState.charPos = 0;
+                _parseState.charsUsed = 0;
+
+                // For testing purposes:
+                //var currtext = SXML_Helpers.Slice<char>(_bufferState.chars, 0, _bufferState.charsRead);
+                //_parseState.sb.Append(currtext);
+            }
             else
             {
-                _state.EOF = true;
+                _bufferState.EOF = true;
             }
         }
         // End Buffer Allocation & Character Encoding
 
-        private SXML_EventArgs _sbFlush(SXML_EventArgs arg)
+        public void _parse()
         {
-            if (arg is Element)
+            switch (_parseState.state)
             {
-                var elem = arg as Element;
-                elem.Name = _sb.ToString();
-                _sb.Clear();
-            }
-            arg.Raise(this);
-            return arg;
-        }
-
-        private void _increment()
-        {
-            if (_state.charToParse == _state.charsRead)
-            {
-                ReadData();
-            }
-            else
-            {
-                ++_state.charToParse;
+                case ParseStates.init:
+                    _parseState.state = ParseStates.TextReader;
+                    break;
+                case ParseStates.TextReader:
+                    _textReader();
+                    break;
+                case ParseStates.TagReader:
+                    _tagReader();
+                    break;
+                default:
+                    break;
             }
         }
     }

@@ -44,10 +44,12 @@ namespace SimpleXML
         public event EventHandler DTag;
         public event EventHandler Text;
         public event EventHandler Elem;
+        public event EventHandler ETag;
 
         public void RaiseOTag(EventArgs ea) => Invoke(OTag, ea);
         public void RaiseCTag(EventArgs ea) => Invoke(CTag, ea);
         public void RaiseDTag(EventArgs ea) => Invoke(DTag, ea);
+        public void RaiseETag(EventArgs ea) => Invoke(ETag, ea);
         public void RaiseText(EventArgs ea) => Invoke(Text, ea);
         public void RaiseElem(EventArgs ea) => Invoke(Elem, ea);
     }

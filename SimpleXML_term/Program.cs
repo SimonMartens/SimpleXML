@@ -20,7 +20,7 @@ namespace SimpleXML_term
             bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                UTF16uri = @"/home/simon/repos/Hamann/XML_Aktuell/2019-03-07/HAMANN.xml";
+                UTF16uri = @"/home/simon/repos/SimpleXML/HAMANN.xml";
                 UTF8uri = UTF16uri;
             }
             
@@ -40,14 +40,23 @@ namespace SimpleXML_term
 
         public static void TestSXML(string uri)
         {
+            // Prep
             stopwatch = new Stopwatch();
             MemoryStream ms = new MemoryStream(File.ReadAllBytes(uri), 0, Convert.ToInt32(new FileInfo(uri).Length));
             stopwatch.Start();
+            
+            // Initialization of a reader
             SimpleDoc reader = new SimpleDoc();
-            reader.MgmtEvents.StartUpComplete += AcceptStartup;
-            reader.ParseEvents.OTag += AcceptOTag;
-            reader.ParseEvents.CTag += AcceptCTag;
+
+            // Subscribe to events managed by your code here
+            // reader.MgmtEvents.StartUpComplete += AcceptStartup;
+
+            // Load the data into the parser
             reader.Load(ms);
+
+            // Take ihe reader for a spin
+            reader._testRead();
+
             stopwatch.Stop();
             reader.Close();
             ms.Close();
@@ -117,14 +126,14 @@ namespace SimpleXML_term
 
         public static void AcceptOTag(object sender, EventArgs arg)
         {
-            // var a = arg as Element;
-            // Console.WriteLine(a.Name + " opened.");
+            var a = arg as Element;
+            Console.WriteLine(a.Name + " opened.");
         }
 
         public static void AcceptCTag(object sender, EventArgs arg)
         {
-            // var a = arg as Element;
-            // Console.WriteLine(a.Name + " closed.");
+            var a = arg as Element;
+            Console.WriteLine(a.Name + " closed.");
         }
     }
 }

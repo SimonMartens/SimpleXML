@@ -9,8 +9,9 @@ namespace SimpleXML
         // Clearing of the fields
         public void Close() 
         {
-            _state.close();
-            _settings.close();
+            _bufferState.dispose();
+            _settings.dispose();
+            _parseState.dispose();
         }
 
         // Implementation of IDisposable

@@ -33,40 +33,66 @@ namespace SimpleXML
                 documentStartPos = 0;
             }
 
-            internal void close()
+            internal void reset() => clear();
+            internal void dispose() => clear();
+        }
+
+        internal struct ParseStateData
+        {
+            // Current state & method
+            internal ParseStates state;
+            internal ParseMethods method;
+
+            // Position mangement
+            internal long line;
+            internal long position;
+
+            // Data for bitwise parsing
+            // _bufferState.bytes[]-Pointer
+            // Pointer to beginning of data to parse
+            internal int bytePos;
+            // Lookahead pointer to end of data to parse
+            internal int bytesUsed;
+
+            // Data for charwise parsing
+            // _bufferState.chars[]-Pointer
+            // Pointer to beginning of data to parse
+            internal int charPos;
+            // Lookahead pointer to end of data to parse
+            internal int charsUsed;
+
+            // Current Value of String
+            internal StringBuilder sb;
+
+            internal void clear()
             {
-                baseStream.Close();
-                clear();
+                state = ParseStates.init;
+                method = ParseMethods.init;
+                bytePos = 0;
+                bytesUsed = 0;
+                charPos = 0;
+                charsUsed = 0;
+                sb = new StringBuilder();
             }
+
+            internal void reset() => clear();
+            internal void dispose() => clear();
         }
 
         // Handles a simple state, such as parsing position, is a struct to keep it on the stack
-        internal struct StateData
+        internal struct BufferStateData
         {
-            // Position mangement
-            long line;
-            long position;
-
-            // Active Parser
-            internal Parser ActiveParser;
-
             // Byte buffer
             // increases speed and decreases memory footprint of the parser
             internal byte[] bytes;
-            // Bytes converted into char overall
-            internal int bytesUsed;
             // Bytes read from stream last time
             internal int bytesRead;
 
             // Character buffer
             // It's good to use a buffer to increase speed and and minimize the amout of systemcalls neccessary
             internal char[] chars;
-            // Number of chars already parsed
-            internal int charsUsed;
             // Chars read from bytes last time
             internal int charsRead;
-            // Pointer to char currently toParse
-            internal int charToParse;
 
             // Handles EOF
             internal bool EOF;
@@ -75,43 +101,26 @@ namespace SimpleXML
             {
                 bytes = null;
                 chars = null;
-                bytesUsed = 0; 
-                charsUsed = 0;
                 bytesRead = 0;
                 charsRead = 0;
                 EOF = false;
             }
 
-            internal void close() => clear();
+            internal void reset() => clear();
+            internal void dispose() => clear();
         }
 
-        internal class Parser
-        {
-            private LinkedList<string> _openNodes = new LinkedList<string>();
-            private int _noNodes = 0;
+        internal enum ParseStates {
+            init,
+            fallback,
+            TagReader,
+            TextReader
+        }
 
-            internal LinkedList<string> openNodes
-            {
-                get => _openNodes;
-                set => _openNodes = value;
-            }
-            
-            internal int noNodes
-            {
-                get => _noNodes;
-                set => _noNodes = value;
-            }
-
-            internal Parser Pass(Parser toPassTo) {
-                toPassTo.noNodes = this.noNodes;
-                toPassTo.openNodes = this.openNodes;
-                return toPassTo;
-            }
-
-            internal void Parse() 
-            {
-                
-            }
+        internal enum ParseMethods {
+            init,
+            bitwise,
+            charwise
         }
         // End Custom Data Types
     }
